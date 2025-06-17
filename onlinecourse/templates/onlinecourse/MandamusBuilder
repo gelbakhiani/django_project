@@ -1,1 +1,64 @@
+// POST /api/eb1/intake
+router.post('/eb1/intake', authenticate, async (req, res) => {
+  const { beneficiary, petitionType, employer, evidence } = req.body;
+
+  if (!beneficiary || !petitionType) {
+    return res.status(400).json({ error: 'Missing required fields.' });
+  }
+
+  const newCase = await EB1Case.create({
+    ...beneficiary,
+    petitionType,
+    employer,
+    evidence,
+    createdBy: req.user.id,
+    status: 'DRAFT',
+  });
+
+  res.status(201).json({ caseId: newCase.id, message: 'EB-1 draft created.' });
+});
+
+export function checkMandamusEligibility(filingDate: string): boolean {
+  const oneYearAgo = new Date();
+  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+  return new Date(filingDate) < oneYearAgo;
+}
+
+export function basicSecurityHeaders(req: Request, res: Response, next: NextFunction) {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Content-Security-Policy', "default-src 'self'");
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  next();
+}
+
+
+export function parseRFEText(text: string): RFEAnalysis {
+  const lower = text.toLowerCase();
+  return {
+    requiresExpertLetters: lower.includes('expert opinion'),
+    mentionsPublications: lower.includes('published material'),
+    deadline: extractDate(text),
+    strengthEstimate: estimateComplexity(text),
+  };
+}
+
+import jwt from 'jsonwebtoken';
+const secret = process.env.JWT_SECRET;
+
+export function generateToken(userId: string) {
+  return jwt.sign({ userId }, secret, {
+    expiresIn: '2h',
+    algorithm: 'HS512',
+  });
+}
+
+export function verifyToken(token: string) {
+  try {
+    return jwt.verify(token, secret, { algorithms: ['HS512'] });
+  } catch {
+    return null;
+  }
+}
+
 
